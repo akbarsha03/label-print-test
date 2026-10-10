@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Label Print Test · Zebra ZD230</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: #1a1a1a; background: #f3f4f6; }
+  header { padding: 14px 20px; background: #111827; color: #fff; }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: #9ca3af; font-size: 13px; }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 20px; padding: 20px; }
+  .panel { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  fieldset { border: 1px solid #e5e7eb; border-radius: 6px; margin: 0 0 12px; padding: 8px 10px; }
+  legend { font-weight: 600; font-size: 12px; text-transform: uppercase; color: #6b7280; }
+  label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
+  input, select { width: 150px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 4px; font: inherit; }
+  input[type=checkbox] { width: auto; }
+  button { padding: 9px 14px; border: 0; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary { background: #2563eb; color: #fff; width: 100%; font-size: 16px; }
+  .secondary { background: #e5e7eb; }
+  .row-btns { display: flex; gap: 8px; margin-top: 8px; }
+  .row-btns button { flex: 1; }
+  .stage { overflow: auto; }
+  .stats { font-size: 13px; color: #374151; margin-bottom: 12px; }
+  .stats b { color: #111; }
+  .warn { color: #b91c1c; font-weight: 600; }
+  .zoomwrap { transform-origin: top left; }
+  textarea { width: 100%; height: 160px; font: 12px monospace; margin-top: 8px; }
+  details summary { cursor: pointer; font-weight: 600; margin-top: 16px; }
+  .help { font-size: 13px; color: #374151; }
+  .help li { margin: 4px 0; }
+
+  /* ---- label rendering (real mm units, same for screen + print) ---- */
+  .sheet { display: flex; background: #fff; overflow: hidden; }
+  .sheet + .sheet { margin-top: 3mm; }
+  .label { position: relative; overflow: hidden; display: flex; flex-direction: column;
+           font-family: Arial, Helvetica, sans-serif; color: #000; line-height: 1.05; }
+  .screen .label { outline: 1px dashed #9ca3af; border-radius: 1.5mm; }
+  .screen .label.overflow { outline: 2px solid #dc2626; }
+  .label.border { border: 0.25mm solid #000; }
+  .label > * { flex-shrink: 0; }
+  .label .t { white-space: nowrap; overflow: hidden; text-overflow: clip; }
+  .label .name { font-weight: 700; }
+  .label .bc { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
+  .label .bc.top { margin-top: 0; margin-bottom: auto; }
+  .label .bc .t { margin-top: 0.3mm; letter-spacing: 0.5mm; }
+  .label svg { display: block; }
+  .label .split { display: flex; justify-content: space-between; gap: 1mm; }
+
+  @media print {
+    body { background: #fff; }
+    header, .panel.controls, .stats, .no-print { display: none !important; }
+    main { display: block; padding: 0; }
+    .panel { box-shadow: none; padding: 0; border-radius: 0; }
+    .zoomwrap { transform: none !important; }
+    .sheet { page-break-after: always; break-after: page; }
+    .sheet + .sheet { margin-top: 0; }
+    .screen .label { outline: none !important; }
+  }
+</style>
+<style id="page-size"></style>
+</head>
+<body>
+<header>
+  <h1>Label Print Test: Zebra ZD230 (203 dpi)</h1>
+  <p>Change the settings, check the preview, then press Print. Red outline = the text does not fit on the label.</p>
+</header>
+<main>
+  <div class="panel controls">
+    <fieldset>
+      <legend>Label roll</legend>
+      <label>Preset
+        <select id="preset">
+          <option value="33,20,3,2">33 × 20 mm, 3 across</option>
+          <option value="33,25,3,2">33 × 25 mm, 3 across</option>
+          <option value="34,25,3,2">34 × 25 mm, 3 across</option>
+          <option value="35,25,3,2">35 × 25 mm, 3 across</option>
+          <option value="32,19,3,2">32 × 19 mm, 3 across</option>
+          <option value="50,25,2,2">50 × 25 mm, 2 across</option>
+          <option value="100,50,1,0">100 × 50 mm, 1 across</option>
+          <option value="custom">Custom (type below)</option>
+        </select>
+      </label>
+      <label>Label width (mm) <input id="w" type="number" step="0.5" value="33"></label>
+      <label>Label height (mm) <input id="h" type="number" step="0.5" value="20"></label>
+      <label>Labels across <input id="cols" type="number" min="1" max="4" value="3"></label>
+      <label>Gap between labels (mm) <input id="gap" type="number" step="0.5" value="2"></label>
+      <label>Left offset (mm) <input id="offset" type="number" step="0.5" value="0"></label>
+      <label>Inner padding (mm) <input id="pad" type="number" step="0.5" value="1.5"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Content</legend>
+      <label>Customer name <input id="name" value="Sakthivel"></label>
+      <label>Serial no. <input id="serial" value="00124"></label>
+      <label>Warehouse <input id="wh" value="Kattupakkam"></label>
+      <label>City <input id="city" value="Chennai"></label>
+      <label>State code <input id="state" value="TN"></label>
+      <label>Barcode value
+        <select id="bcsrc">
+          <option value="serial">Serial no.</option>
+          <option value="serial-state">State + serial (TN00124)</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label>Custom barcode <input id="bccustom" value="TN-KTP-00124"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Format</legend>
+      <label>Layout
+        <select id="layout">
+          <option value="stack">Stacked: 4 lines + barcode</option>
+          <option value="compact">Compact: 2 lines + barcode</option>
+          <option value="barfirst">Barcode on top, details below</option>
+          <option value="minimal">Name + barcode only</option>
+        </select>
+      </label>
+      <label>Name size (pt) <input id="fsName" type="number" step="0.5" value="8"></label>
+      <label>Detail size (pt) <input id="fsBody" type="number" step="0.5" value="6"></label>
+      <label>Barcode height (mm) <input id="bch" type="number" step="0.5" value="7"></label>
+      <label>Bar thickness
+        <select id="mod">
+          <option value="1">1 dot (0.125 mm), smallest</option>
+          <option value="2" selected>2 dots (0.25 mm), recommended</option>
+          <option value="3">3 dots (0.375 mm), easiest to scan</option>
+        </select>
+      </label>
+      <label>Print number under barcode <input id="hr" type="checkbox" checked></label>
+      <label>Draw label border (alignment test) <input id="border" type="checkbox"></label>
+      <label>Rows to print <input id="rows" type="number" min="1" max="20" value="1"></label>
+      <label>Same label in every column <input id="same" type="checkbox" checked></label>
+    </fieldset>
+
+    <button class="primary" id="print">Print</button>
+    <div class="row-btns">
+      <button class="secondary" id="zplbtn">Show ZPL (raw)</button>
+      <button class="secondary" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="panel stage">
+    <div class="stats" id="stats"></div>
+    <div class="zoomwrap" id="zoomwrap"><div id="out"></div></div>
+
+    <div class="no-print">
+      <textarea id="zpl" hidden readonly></textarea>
+      <details>
+        <summary>How to print correctly (read once)</summary>
+        <ol class="help">
+          <li>In the print dialog choose printer <b>ZDesigner ZD230-203dpi</b>, set <b>Margins: None</b>, <b>Scale: 100%</b> (not "Fit to page"), and turn <b>Headers and footers</b> off.</li>
+          <li>Under "More settings → Paper size", choose the size shown above the preview (for example <b>103 × 20 mm</b>). If it is missing, add it once in Windows: <i>Printers → ZDesigner → Printing Preferences → Page Setup → New</i>, using the same width × height.</li>
+          <li>Set the driver to <b>Thermal Transfer</b> (this printer uses a ribbon) and Darkness to about 15–20.</li>
+          <li>If the print is shifted sideways, change <b>Left offset</b>. If it starts halfway down a label, hold the round button on the printer for about 2 s to calibrate the label sensor, then try again.</li>
+          <li>Tick <b>Draw label border</b> for the first print. The black box should sit inside each sticker.</li>
+          <li>Test the barcode with a phone scanner app or the warehouse scanner. If it does not read, choose a thicker bar or a taller barcode.</li>
+          <li><b>Show ZPL</b> gives the same label in Zebra's own printer language. Use it as a fallback if browser printing scales the label. Send it with Zebra Setup Utilities → <i>Open Communication with Printer</i> → paste → Send.</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const DOTS_PER_MM = 8; // 203 dpi
+const ids = ['w','h','cols','gap','offset','pad','name','serial','wh','city','state','bcsrc','bccustom','layout','fsName','fsBody','bch','mod','hr','border','rows','same'];
+const defaults = Object.fromEntries(ids.map(k => [k, $(k).type === 'checkbox' ? $(k).checked : $(k).value]));
+
+function cfg() {
+  const c = {};
+  for (const k of ids) c[k] = $(k).type === 'checkbox' ? $(k).checked : $(k).value;
+  for (const k of ['w','h','cols','gap','offset','pad','fsName','fsBody','bch','mod','rows']) c[k] = parseFloat(c[k]) || 0;
+  c.cols = Math.max(1, Math.round(c.cols)); c.rows = Math.max(1, Math.round(c.rows));
+  return c;
+}
+
+function barcodeValue(c, i) {
+  const serial = c.same ? c.serial : String(parseInt(c.serial, 10) + i).padStart(c.serial.length, '0');
+  if (c.bcsrc === 'serial-state') return { v: c.state + serial, serial };
+  if (c.bcsrc === 'custom') return { v: c.bccustom, serial };
+  return { v: serial, serial };
+}
+
+function barcodeSvg(value, c) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  try {
+    JsBarcode(svg, value, { format: 'CODE128', width: 1, height: 40, margin: 0, displayValue: false });
+  } catch (e) { return { el: document.createTextNode('invalid barcode'), widthMm: 0 }; }
+  // 1 SVG unit = 1 module; stretch to exact printer dots so bars land on whole dots
+  const modules = parseFloat(svg.getAttribute('width'));
+  const widthMm = modules * c.mod / DOTS_PER_MM;
+  svg.setAttribute('viewBox', `0 0 ${modules} 40`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('width', widthMm + 'mm');
+  svg.setAttribute('height', c.bch + 'mm');
+  svg.setAttribute('shape-rendering', 'crispEdges');
+  return { el: svg, widthMm, modules };
+}
+
+function line(text, pt, cls = '') {
+  const d = document.createElement('div');
+  d.className = 't ' + cls; d.style.fontSize = pt + 'pt'; d.textContent = text;
+  return d;
+}
+function split(a, b, pt, bold) {
+  const d = document.createElement('div'); d.className = 'split';
+  const x = line(a, pt, bold ? 'name' : ''), y = line(b, pt, bold ? 'name' : '');
+  d.append(x, y); return d;
+}
+
+function buildLabel(c, i) {
+  const { v, serial } = barcodeValue(c, i);
+  const L = document.createElement('div');
+  L.className = 'label' + (c.border ? ' border' : '');
+  Object.assign(L.style, { width: c.w + 'mm', height: c.h + 'mm', padding: c.pad + 'mm' });
+  const bc = document.createElement('div'); bc.className = 'bc';
+  const b = barcodeSvg(v, c); bc.append(b.el);
+  if (c.hr) bc.append(line(v, c.fsBody));
+  const loc = [c.wh, c.city].filter(Boolean).join(', ');
+  switch (c.layout) {
+    case 'stack':
+      L.append(line(c.name, c.fsName, 'name'), line('#' + serial + '  ·  ' + c.state, c.fsBody), line(loc, c.fsBody), bc); break;
+    case 'compact':
+      L.append(split(c.name, '#' + serial, c.fsName, true), split(loc, c.state, c.fsBody), bc); break;
+    case 'barfirst':
+      bc.classList.add('top');
+      L.append(bc, split(c.name, c.state, c.fsName, true), line('#' + serial + ' · ' + loc, c.fsBody)); break;
+    case 'minimal':
+      L.append(line(c.name, c.fsName, 'name'), bc); break;
+  }
+  return { L, barWidthMm: b.widthMm };
+}
+
+function render() {
+  const c = cfg();
+  const pageW = c.offset + c.cols * c.w + (c.cols - 1) * c.gap;
+  $('page-size').textContent = `@page { size: ${pageW}mm ${c.h}mm; margin: 0; } @media print { .sheet { width: ${pageW}mm; height: ${c.h}mm; } }`;
+  const out = $('out'); out.innerHTML = ''; out.className = 'screen';
+  let barW = 0;
+  for (let r = 0; r < c.rows; r++) {
+    const s = document.createElement('div'); s.className = 'sheet';
+    s.style.paddingLeft = c.offset + 'mm'; s.style.gap = c.gap + 'mm';
+    for (let col = 0; col < c.cols; col++) {
+      const { L, barWidthMm } = buildLabel(c, r * c.cols + col);
+      barW = barWidthMm; s.append(L);
+    }
+    out.append(s);
+  }
+  // overflow detection: any text/bar outside the label minus its padding, or text cut off sideways
+  let overflow = 0;
+  out.querySelectorAll('.label').forEach(L => {
+    const r = L.getBoundingClientRect(), p = r.width / c.w * c.pad - 1;
+    const over = [...L.querySelectorAll('.t, svg')].some(e => {
+      const b = e.getBoundingClientRect();
+      return e.scrollWidth > e.clientWidth + 1 || b.top < r.top + p || b.left < r.left + p || b.right > r.right - p || b.bottom > r.bottom - p;
+    });
+    L.classList.toggle('overflow', over); if (over) overflow++;
+  });
+  const usable = c.w - 2 * c.pad;
+  const barFits = barW <= usable;
+  $('stats').innerHTML =
+    `Page size for the print dialog: <b>${pageW.toFixed(1)} × ${c.h} mm</b> (${Math.round(pageW * DOTS_PER_MM)} × ${Math.round(c.h * DOTS_PER_MM)} dots) · ` +
+    `Barcode width: <b>${barW.toFixed(1)} mm</b> of ${usable.toFixed(1)} mm usable ` +
+    (barFits ? '✔' : '<span class="warn">✘ too wide: use thinner bars or a shorter value</span>') +
+    (overflow ? ` · <span class="warn">${overflow} label(s) overflow</span>` : ' · <b>All content fits</b>');
+  // on-screen zoom so 33 mm labels are readable
+  $('zoomwrap').style.transform = `scale(${Math.min(3, Math.max(1, 900 / (pageW * 3.78)))})`;
+  if (!$('zpl').hidden) $('zpl').value = zpl(c);
+}
+
+// ZPL fallback: the same content in Zebra's native language, no driver scaling involved.
+function zpl(c) {
+  const d = mm => Math.round(mm * DOTS_PER_MM);
+  const ptDots = pt => Math.round(pt * 0.3528 * DOTS_PER_MM);
+  const loc = [c.wh, c.city].filter(Boolean).join(', ');
+  let s = '';
+  for (let r = 0; r < c.rows; r++) {
+    s += `^XA^CI28^PW${d(c.offset + c.cols * c.w + (c.cols - 1) * c.gap)}^LL${d(c.h)}^LH0,0\n`;
+    for (let col = 0; col < c.cols; col++) {
+      const { v, serial } = barcodeValue(c, r * c.cols + col);
+      const x = d(c.offset + col * (c.w + c.gap) + c.pad);
+      let y = d(c.pad);
+      const txt = (t, pt) => { const h = ptDots(pt); s += `^FO${x},${y}^A0N,${h},${h}^FB${d(c.w - 2 * c.pad)},1,0,L^FD${t}^FS\n`; y += h + 2; };
+      const bar = () => { s += `^FO${x},${y}^BY${c.mod}^BCN,${d(c.bch)},${c.hr ? 'Y' : 'N'},N,N^FD${v}^FS\n`; y += d(c.bch) + (c.hr ? ptDots(c.fsBody) + 4 : 0); };
+      if (c.layout === 'barfirst') { bar(); txt(c.name + '  ' + c.state, c.fsName); txt('#' + serial + ' ' + loc, c.fsBody); }
+      else if (c.layout === 'minimal') { txt(c.name, c.fsName); bar(); }
+      else if (c.layout === 'compact') { txt(c.name + '  #' + serial, c.fsName); txt(loc + '  ' + c.state, c.fsBody); bar(); }
+      else { txt(c.name, c.fsName); txt('#' + serial + '  ' + c.state, c.fsBody); txt(loc, c.fsBody); bar(); }
+    }
+    s += '^XZ\n';
+  }
+  return s;
+}
+
+$('preset').addEventListener('change', e => {
+  if (e.target.value === 'custom') return;
+  const [w, h, cols, gap] = e.target.value.split(',');
+  Object.assign($('w'), { value: w }); $('h').value = h; $('cols').value = cols; $('gap').value = gap;
+  render();
+});
+['w','h','cols','gap'].forEach(k => $(k).addEventListener('input', () => $('preset').value = 'custom'));
+ids.forEach(k => $(k).addEventListener('input', render));
+ids.forEach(k => $(k).addEventListener('change', render));
+$('print').onclick = () => window.print();
+$('zplbtn').onclick = () => { $('zpl').hidden = !$('zpl').hidden; render(); };
+$('reset').onclick = () => { ids.forEach(k => $(k).type === 'checkbox' ? $(k).checked = defaults[k] : $(k).value = defaults[k]); $('preset').selectedIndex = 0; render(); };
+render();
+</script>
+</body>
+</html>
