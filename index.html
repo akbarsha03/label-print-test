@@ -28,7 +28,6 @@
   .stats { font-size: 13px; color: #374151; margin-bottom: 12px; }
   .stats b { color: #111; }
   .warn { color: #b91c1c; font-weight: 600; }
-  .zoomwrap { transform-origin: top left; }
   textarea { width: 100%; height: 160px; font: 12px monospace; margin-top: 8px; }
   details summary { cursor: pointer; font-weight: 600; margin-top: 16px; }
   .help { font-size: 13px; color: #374151; }
@@ -45,6 +44,10 @@
   .label > * { flex-shrink: 0; }
   .label .t { white-space: nowrap; overflow: hidden; text-overflow: clip; }
   .label .name { font-weight: 700; }
+  .label .tag { position: absolute; top: 0.15mm; right: 0.6mm; font-size: 3.5pt; line-height: 1; color: #000; }
+  .legend { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px; }
+  .legend td { padding: 4px 6px; border-top: 1px solid #e5e7eb; }
+  .legend button { padding: 3px 10px; font-size: 12px; background: #e5e7eb; }
   .label .t.wrap { white-space: normal; overflow-wrap: anywhere; }
   .label .bc { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
   .label .bc.top { margin-top: 0; margin-bottom: auto; }
@@ -57,7 +60,7 @@
     header, .panel.controls, .stats, .no-print { display: none !important; }
     main { display: block; padding: 0; }
     .panel { box-shadow: none; padding: 0; border-radius: 0; }
-    .zoomwrap { transform: none !important; }
+    .zoomwrap { zoom: 1 !important; }
     .sheet { page-break-after: always; break-after: page; }
     .sheet + .sheet { margin-top: 0; }
     .screen .label { outline: none !important; }
@@ -113,6 +116,12 @@
 
     <fieldset>
       <legend>Format (auto-fit)</legend>
+      <label>What to print
+        <select id="mode">
+          <option value="test" selected>Test sheet: 12 variations</option>
+          <option value="single">Single design (settings below)</option>
+        </select>
+      </label>
       <label>Layout
         <select id="layout">
           <option value="stack">Stacked: 4 lines + barcode</option>
@@ -135,7 +144,7 @@
       </label>
       <label>Print number under barcode <input id="hr" type="checkbox" checked></label>
       <label>Draw label border (alignment test) <input id="border" type="checkbox"></label>
-      <label>Rows to print <input id="rows" type="number" min="1" max="20" value="1"></label>
+      <label>Rows to print (single design) <input id="rows" type="number" min="1" max="20" value="1"></label>
     </fieldset>
 
     <button class="primary" id="print">Print</button>
@@ -148,6 +157,7 @@
   <div class="panel stage">
     <div class="stats" id="stats"></div>
     <div class="zoomwrap" id="zoomwrap"><div id="out"></div></div>
+    <div id="legend" class="no-print"></div>
 
     <div class="no-print">
       <textarea id="zpl" hidden readonly></textarea>
@@ -172,7 +182,7 @@ const $ = id => document.getElementById(id);
 const DOTS_PER_MM = 8; // 203 dpi
 const PX_PER_MM = 96 / 25.4;
 const MAX_MOD = 4; // thicker bars stop helping scanners
-const ids = ['w','h','cols','gap','offset','pad','name','cust','item','wh','city','state','bcfmt','layout','fsName','fsBody','fsMin','bchMin','bchMax','modMin','hr','border','rows'];
+const ids = ['w','h','cols','gap','offset','pad','name','cust','item','wh','city','state','bcfmt','layout','fsName','fsBody','fsMin','bchMin','bchMax','modMin','hr','border','rows','mode'];
 const defaults = Object.fromEntries(ids.map(k => [k, $(k).type === 'checkbox' ? $(k).checked : $(k).value]));
 
 function cfg() {
@@ -181,6 +191,33 @@ function cfg() {
   for (const k of ['w','h','cols','gap','offset','pad','fsName','fsBody','fsMin','bchMin','bchMax','modMin','rows']) c[k] = parseFloat(c[k]) || 0;
   c.cols = Math.max(1, Math.round(c.cols)); c.rows = Math.max(1, Math.round(c.rows));
   return c;
+}
+
+// Test sheet: each sticker is a different combination; the tiny V-number in its corner says which.
+// Content fields (name, location) come from the form unless a variant overrides them to test length.
+const LONG = { name: 'Sakthivel Ramakrishnan', wh: 'Kattupakkam Industrial Estate' };
+const VARIANTS = [
+  ['Stacked, standard', { layout: 'stack' }],
+  ['Stacked, long name + location', { layout: 'stack', ...LONG }],
+  ['Compact, standard', { layout: 'compact' }],
+  ['Compact, long name + location', { layout: 'compact', ...LONG }],
+  ['Barcode on top, standard', { layout: 'barfirst' }],
+  ['Barcode on top, long location', { layout: 'barfirst', wh: LONG.wh }],
+  ['Name + barcode', { layout: 'minimal' }],
+  ['Name + barcode, short name', { layout: 'minimal', name: 'Ravi' }],
+  ['Stacked, big text (name 12 pt)', { layout: 'stack', fsName: 12, fsBody: 8.5 }],
+  ['Stacked, small text, tall barcode', { layout: 'stack', fsName: 7, fsBody: 5 }],
+  ['Stacked, no number under barcode', { layout: 'stack', hr: false }],
+  ['Stacked, tight margins + border', { layout: 'stack', pad: 0.8, border: true }],
+];
+const CONTENT_KEYS = ['name', 'wh', 'city'];
+
+function useVariant(k) {
+  for (const [key, val] of Object.entries(VARIANTS[k][1])) {
+    if (CONTENT_KEYS.includes(key)) continue;
+    $(key).type === 'checkbox' ? $(key).checked = val : $(key).value = val;
+  }
+  $('mode').value = 'single'; $('rows').value = 1; render();
 }
 
 // Every label gets its own item number; the barcode = customer + item, so each good is unique.
@@ -236,7 +273,8 @@ function buildLabel(c, i) {
     case 'minimal':
       L.append(line(c.name, c.fsName, 'name'), bc); break;
   }
-  L._fit = { v, b };
+  if (c.tag) { const t = document.createElement('div'); t.className = 'tag'; t.textContent = c.tag; L.append(t); }
+  L._fit = { v, b }; L._c = c;
   return L;
 }
 
@@ -262,7 +300,7 @@ function fit(L, c) {
     t.dataset.cap = pt;
   }
   const inner = L.clientHeight - 2 * c.pad * PX_PER_MM;
-  const used = () => [...L.children].reduce((s, e) => s + e.offsetHeight, 0);
+  const used = () => [...L.children].reduce((s, e) => s + (e.classList.contains('tag') ? 0 : e.offsetHeight), 0);
   let scale = 1;
   while (used() > inner && scale > 0.2) {
     scale -= 0.04;
@@ -280,24 +318,31 @@ function render() {
   const c = cfg();
   const pageW = c.offset + c.cols * c.w + (c.cols - 1) * c.gap;
   $('page-size').textContent = `@page { size: ${pageW}mm ${c.h}mm; margin: 0; } @media print { .sheet { width: ${pageW}mm; height: ${c.h}mm; } }`;
+  $('zoomwrap').style.zoom = 1; // measure at real size; zoom is applied after fitting
   const out = $('out'); out.innerHTML = ''; out.className = 'screen';
-  for (let r = 0; r < c.rows; r++) {
+  const test = c.mode === 'test';
+  const rows = test ? Math.ceil(VARIANTS.length / c.cols) : c.rows;
+  for (let r = 0; r < rows; r++) {
     const s = document.createElement('div'); s.className = 'sheet';
     s.style.paddingLeft = c.offset + 'mm'; s.style.gap = c.gap + 'mm';
-    for (let col = 0; col < c.cols; col++) s.append(buildLabel(c, r * c.cols + col));
+    for (let col = 0; col < c.cols; col++) {
+      const k = r * c.cols + col;
+      if (test && k >= VARIANTS.length) break;
+      s.append(buildLabel(test ? { ...c, ...VARIANTS[k][1], tag: 'V' + (k + 1) } : c, k));
+    }
     out.append(s);
   }
   const labels = [...out.querySelectorAll('.label')];
-  labels.forEach(L => fit(L, c));
+  labels.forEach(L => fit(L, L._c));
   // overflow detection: anything still outside the label (minus padding) or cut off sideways
   let overflow = 0;
   labels.forEach(L => {
-    const r = L.getBoundingClientRect(), p = r.width / c.w * c.pad - 1;
+    const r = L.getBoundingClientRect(), p = r.width / c.w * L._c.pad - 1;
     const over = [...L.querySelectorAll('.t, svg')].some(e => {
       const b = e.getBoundingClientRect();
       return e.scrollWidth > e.clientWidth + 1 || b.top < r.top + p || b.left < r.left + p || b.right > r.right - p || b.bottom > r.bottom - p;
     });
-    L.classList.toggle('overflow', over); if (over) overflow++;
+    L.classList.toggle('overflow', over); L._fit.over = over; if (over) overflow++;
   });
   const f = labels[0]._fit, usable = c.w - 2 * c.pad;
   $('stats').innerHTML =
@@ -305,9 +350,11 @@ function render() {
     `Barcode: <b>${f.barW.toFixed(1)} × ${f.bch.toFixed(1)} mm</b>, bars ${f.mod} dots thick ` +
     (f.barMin <= usable ? `(minimum ${f.barMin.toFixed(1)} mm of ${usable.toFixed(1)} mm usable ✔)` : `<span class="warn">✘ even at the minimum it needs ${f.barMin.toFixed(1)} mm but only ${usable.toFixed(1)} mm is usable: use "digits only" with an even number of digits, or shorter numbers</span>`) +
     ` · Smallest text used: <b>${f.minPt.toFixed(1)} pt</b>` +
-    (overflow ? ` · <span class="warn">${overflow} label(s) don't fit even at the smallest text</span>` : ' · <b>All content fits</b>');
+    (overflow ? ` · <span class="warn">${overflow} label(s) don't fit even at the smallest text</span>` : ' · <b>All content fits</b>') +
+    (test ? `<br>Test sheet: ${labels.length} stickers, ${rows} rows. Each has a tiny V-number in its top-right corner. Print, pick the best one, press <b>Use</b> in the list below the stickers.` : '');
+  $('legend').innerHTML = !test ? '' : '<table class="legend">' + labels.map((L, k) => { const f = L._fit; return `<tr><td><b>V${k + 1}</b></td><td>${VARIANTS[k][0]}</td><td>${f.over ? '<span class="warn">✘ does not fit</span>' : '✔ fits'}</td><td>barcode ${f.barW.toFixed(1)} × ${f.bch.toFixed(1)} mm, text ≥ ${f.minPt.toFixed(1)} pt</td><td><button onclick="useVariant(${k})">Use</button></td></tr>`; }).join('') + '</table>';
   // on-screen zoom so 33 mm labels are readable
-  $('zoomwrap').style.transform = `scale(${Math.min(3, Math.max(1, 900 / (pageW * 3.78)))})`;
+  $('zoomwrap').style.zoom = Math.min(3, Math.max(1, 900 / (pageW * 3.78)));
   if (!$('zpl').hidden) $('zpl').value = zpl(c, out);
 }
 
